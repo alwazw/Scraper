@@ -5,8 +5,12 @@ This project is an automated Lead Generation & Aggregation Pipeline. It scrapes 
 
 ## How to Run
 1.  Ensure you have Python installed.
-2.  Install dependencies: `pip install -r requirements.txt` (Note: requirements.txt will be generated as we progress).
-3.  Run the pipeline: `python main.py` (To be implemented).
+2.  Install dependencies: `pip install -r requirements.txt`.
+3.  **Start the Mission Control Dashboard:**
+    ```bash
+    streamlit run modules/harvester/dashboard.py
+    ```
+4.  Configure your niches and locations in the dashboard, save, and click "START HARVESTER".
 
 ## Output
 The final output will be located in `final_delivery/master_leads.db`. You can export this to CSV using any SQLite viewer or the provided export script (TBD).

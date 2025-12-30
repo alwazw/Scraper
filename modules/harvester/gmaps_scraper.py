@@ -3,6 +3,7 @@ import random
 from playwright.async_api import async_playwright
 import sys
 import os
+import json
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -11,7 +12,8 @@ from common.db_factory import DBFactory
 from common.db_utils import init_db
 from common.logging_config import setup_logger
 
-logger = setup_logger('harvester', 'modules/harvester/harvester.log')
+# Modified logging path as per Mission Control requirements
+logger = setup_logger('harvester', 'modules/harvester/logs/harvester.log')
 
 DB_PATH = 'modules/harvester/raw_leads.db'
 SCHEMA_NAME = 'lead_harvest'
@@ -21,9 +23,9 @@ async def exponential_backoff(attempt):
     logger.info(f"Backoff: Sleeping for {delay} seconds...")
     await asyncio.sleep(delay)
 
-async def scrape_google_maps(query, max_leads=10):
+async def scrape_google_maps(query, headless=True, max_leads=10):
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(headless=headless)
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         )
@@ -49,7 +51,11 @@ async def scrape_google_maps(query, max_leads=10):
             # Scroll the feed
             feed = page.locator("div[role='feed']")
             if await feed.count() > 0:
-                for _ in range(3):
+                # Scroll loop
+                # Heuristic: scroll enough to get max_leads
+                # Usually ~20 results per load.
+                scrolls = (max_leads // 20) + 1
+                for _ in range(min(scrolls, 5)): # Cap scrolls to avoid infinite loops
                     await feed.evaluate("node => node.scrollTop = node.scrollHeight")
                     await asyncio.sleep(2)
 
@@ -69,12 +75,10 @@ async def scrape_google_maps(query, max_leads=10):
 
                     result = results.nth(i)
 
-                    # Extract Name from list item first (safer)
+                    # Extract Name
                     aria_label = await result.get_attribute("aria-label")
                     name = aria_label.split(" · ")[0] if aria_label else "Unknown"
-                    # If aria-label is missing or weird, try inner_text of the first child div which often has the title
                     if name == "Unknown" or not name:
-                         # Try fallback
                          try:
                              name = await result.locator(".fontHeadlineSmall").first.inner_text()
                          except:
@@ -89,13 +93,10 @@ async def scrape_google_maps(query, max_leads=10):
                     except:
                         logger.warning("URL didn't change, might be already there or failed.")
 
-                    # Wait for details to settle (generic wait)
                     await asyncio.sleep(2)
 
-                    # Try to refine name from details if possible, but don't crash
+                    # Refine name
                     try:
-                         # Try finding the specific H1 again, but don't fail if not found
-                         # We skip strict checks here and just try to find something plausible if we have "Unknown"
                          if name == "Unknown":
                              details_name = await page.locator("h1.DUwDvf").first.inner_text(timeout=1000)
                              if details_name:
@@ -180,21 +181,55 @@ def save_leads(leads):
         conn.close()
 
 async def main():
-    if len(sys.argv) > 1:
-        query = sys.argv[1]
-    else:
-        query = "software companies in San Francisco"
+    # Check for config file first
+    config_path = os.path.join(os.path.dirname(__file__), '../../config/search_manifest.json')
 
-    logger.info(f"Starting harvest for: {query}")
+    queries = []
+    headless = True
+    max_leads = 10
 
-    for attempt in range(3):
-        leads = await scrape_google_maps(query)
-        if leads:
-            save_leads(leads)
-            break
-        else:
-            logger.warning("No leads found or scraping failed. Retrying...")
-            await exponential_backoff(attempt)
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            niches = config.get('niches', [])
+            locations = config.get('locations', [])
+            headless = config.get('settings', {}).get('headless', True)
+            max_leads = config.get('settings', {}).get('max_results', 10)
+
+            for niche in niches:
+                for location in locations:
+                    if niche and location:
+                        queries.append(f"{niche} in {location}")
+
+            logger.info(f"Loaded {len(queries)} queries from manifest.")
+
+        except Exception as e:
+            logger.error(f"Failed to load manifest: {e}")
+
+    # Fallback to command line if no manifest or queries
+    if not queries and len(sys.argv) > 1:
+        queries = [sys.argv[1]]
+    elif not queries:
+        queries = ["software companies in San Francisco"] # Default default
+
+    for query in queries:
+        logger.info(f"Starting harvest for: {query}")
+
+        success = False
+        for attempt in range(3):
+            leads = await scrape_google_maps(query, headless=headless, max_leads=max_leads)
+            if leads:
+                save_leads(leads)
+                success = True
+                break
+            else:
+                logger.warning("No leads found or scraping failed. Retrying...")
+                await exponential_backoff(attempt)
+
+        if not success:
+            logger.error(f"Failed to harvest for query: {query} after 3 attempts.")
 
 if __name__ == "__main__":
     asyncio.run(main())
