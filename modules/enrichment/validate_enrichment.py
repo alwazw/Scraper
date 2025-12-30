@@ -67,11 +67,23 @@ def validate_enrichment():
         conn.close()
 
         logger.info("Validation Passed: Phase 2 is Green.")
+        generate_report(True, count, enriched_count)
         return True
 
     except Exception as e:
         logger.error(f"Validation Failed with exception: {e}")
+        generate_report(False, 0, 0, str(e))
         return False
+
+def generate_report(success, count, enriched_count, error_msg=None):
+    report_path = os.path.join(os.path.dirname(__file__), '../../reports/module_2_report.md')
+    with open(report_path, 'w') as f:
+        f.write(f"# Module 2: Enrichment Validation Report\n\n")
+        f.write(f"**Status:** {'PASS' if success else 'FAIL'}\n")
+        f.write(f"**Total Enriched Rows:** {count}\n")
+        f.write(f"**Rows with Contacts:** {enriched_count}\n")
+        if error_msg:
+            f.write(f"**Error:** {error_msg}\n")
 
 if __name__ == "__main__":
     if validate_enrichment():
