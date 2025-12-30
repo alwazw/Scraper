@@ -1,0 +1,36 @@
+{
+    "lead_harvest": {
+        "columns": [
+            {"name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT"},
+            {"name": "name", "type": "TEXT NOT NULL"},
+            {"name": "phone", "type": "TEXT"},
+            {"name": "website", "type": "TEXT"},
+            {"name": "address", "type": "TEXT"},
+            {"name": "google_maps_url", "type": "TEXT UNIQUE"}
+        ]
+    },
+    "enrichment": {
+        "columns": [
+            {"name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT"},
+            {"name": "lead_id", "type": "INTEGER"},
+            {"name": "email", "type": "TEXT"},
+            {"name": "facebook", "type": "TEXT"},
+            {"name": "instagram", "type": "TEXT"},
+            {"name": "linkedin", "type": "TEXT"}
+        ]
+    },
+    "master_leads": {
+        "columns": [
+            {"name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT"},
+            {"name": "business_name", "type": "TEXT NOT NULL"},
+            {"name": "phone_number", "type": "TEXT"},
+            {"name": "website", "type": "TEXT"},
+            {"name": "email", "type": "TEXT"},
+            {"name": "facebook_url", "type": "TEXT"},
+            {"name": "instagram_url", "type": "TEXT"},
+            {"name": "linkedin_url", "type": "TEXT"},
+            {"name": "address", "type": "TEXT"},
+            {"name": "source_url", "type": "TEXT"}
+        ]
+    }
+}
